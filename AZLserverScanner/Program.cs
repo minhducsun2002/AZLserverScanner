@@ -66,7 +66,7 @@ namespace AZLserverScanner
 
         static CheckResult CheckServerPort(IPAddress hostIp, int port, int timeout, byte[] packet)
         {
-            var buffer = new byte[1024];
+            var buffer = new byte[20000];
 
             var clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
             {
@@ -145,7 +145,7 @@ namespace AZLserverScanner
                 {
                     if (packetLength > buffer.Length)
                     {
-                        result = result + "Unknown Packet \nProtobuf body:\n length great then buffer";
+                        result = result +$"Unknown Packet \nProtobuf body:\nLength great then buffer: {packetLength} bytes";
                     }
                     else
                     {
