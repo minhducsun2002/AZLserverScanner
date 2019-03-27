@@ -20,7 +20,8 @@ namespace AZLserverScanner
         {
             Timeout,
             Disconnected,
-            Success
+            Success,
+            Error
         }
 
         public CheckCode Code { get; set; }
@@ -42,6 +43,11 @@ namespace AZLserverScanner
 
             var ports = Enumerable.Range(startPort, portCount).ToArray();
             var stopwatch = new Stopwatch();
+
+            if (!Directory.Exists("packets/"))
+            {
+                Directory.CreateDirectory("packets/");
+            }
             
             stopwatch.Start();
 
@@ -61,12 +67,19 @@ namespace AZLserverScanner
             Parallel.ForEach(ports, new ParallelOptions() {MaxDegreeOfParallelism = threads}, (port) =>
             {
                 var result = CheckServerPort(hostIp, port, timeout, packet, buffSize);
-                if (result.Comment != null)
+                if (result.Code == CheckResult.CheckCode.Success)
                 {
                     Console.BackgroundColor = ConsoleColor.Green;
                     Console.WriteLine($"Checked ports: {i++}\tPort: {port}\tCode: {result.Code.ToString()}\n" + result.Comment);
                     Console.BackgroundColor = cOrig;
-                    //File.WriteAllText($"{host}_{port}.txt", result.Comment);
+                    File.WriteAllText($"packets/{host}_{port}.txt", result.Comment);
+                }
+                else if (result.Code == CheckResult.CheckCode.Disconnected)
+                {
+                    Console.BackgroundColor = ConsoleColor.DarkBlue;
+                    Console.WriteLine($"Checked ports: {i++}\tPort: {port}\tCode: {result.Code.ToString()}\n");
+                    Console.BackgroundColor = cOrig;
+                    File.AppendAllText($"packets/{host}_disconnected.txt", port.ToString()+"\n");
                 }
                 else
                 {
@@ -80,27 +93,35 @@ namespace AZLserverScanner
         {
             var buffer = new byte[buffSize];
 
-            var clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
+            try
             {
-                ReceiveTimeout = timeout
-            };
+                var clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
+                {
+                    ReceiveTimeout = timeout
+                };
             
-            IAsyncResult result = clientSocket.BeginConnect(hostIp, port, null, null);
-            bool success = result.AsyncWaitHandle.WaitOne(timeout, true);
+                IAsyncResult result = clientSocket.BeginConnect(hostIp, port, null, null);
+                bool success = result.AsyncWaitHandle.WaitOne(timeout, true);
 
-            if (!success)
+                if (!success)
+                {
+                    return new CheckResult(){Code = CheckResult.CheckCode.Timeout};
+                }
+
+                clientSocket.Send(packet);
+
+                if (clientSocket.Receive(buffer) == 0)
+                {
+                    return new CheckResult() { Code = CheckResult.CheckCode.Disconnected };
+                }
+                return new CheckResult() { Code = CheckResult.CheckCode.Success, Comment = ReadPacket(buffer) };
+            }
+            catch (Exception)
             {
-                return new CheckResult(){Code = CheckResult.CheckCode.Timeout};
+                return new CheckResult() { Code = CheckResult.CheckCode.Error};
             }
 
-            clientSocket.Send(packet);
-
-            if (clientSocket.Receive(buffer) == 0)
-            {
-                return new CheckResult() { Code = CheckResult.CheckCode.Disconnected };
-            }
-
-            return new CheckResult() {Code = CheckResult.CheckCode.Success, Comment = ReadPacket(buffer)};
+            
 
         }
 
