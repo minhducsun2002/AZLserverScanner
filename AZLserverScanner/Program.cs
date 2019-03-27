@@ -1,4 +1,5 @@
 ﻿using System;
+using System.CodeDom;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -27,20 +28,31 @@ namespace AZLserverScanner
     }
     class Program
     {
-        
+        //<host>                <start port>    <count> <timeout>   <threads count> <buff size in bytes>
+        //audit.us.yo-star.com  10              50      1500        20              1024
         static void Main(string[] args)
         {
+            //init params
+            var host = args[0];
+            var startPort = int.Parse(args[1]);
+            var portCount = int.Parse(args[2]);
+            var timeout = int.Parse(args[3]);
+            var threadsCount = int.Parse(args[4]);
+            var buffSize = int.Parse(args[5]);
+
+            var ports = Enumerable.Range(startPort, portCount).ToArray();
             var stopwatch = new Stopwatch();
-            var ports = Enumerable.Range(int.Parse(args[1]), int.Parse(args[2])).ToArray(); //Enumerable.Range(1, 50).ToArray();
-            var host = args[0]; //"audit.us.yo-star.com";
+            
             stopwatch.Start();
-            CheckServerPorts(host, ports, int.Parse(args[3]));
+
+            CheckServerPorts(host, ports, timeout, threadsCount, buffSize);
+
             stopwatch.Stop();
             Console.WriteLine($"Total elapsed time: {stopwatch.Elapsed}");
         }
 
 
-        static void CheckServerPorts(string host, int[] ports, int timeout = 3000, int threads = 20)
+        static void CheckServerPorts(string host, int[] ports, int timeout = 3000, int threads = 20, int buffSize = 1024)
         {
             var cOrig = Console.BackgroundColor;
             var hostIp = Dns.GetHostEntry(host).AddressList[0];
@@ -48,13 +60,13 @@ namespace AZLserverScanner
             int i = 0;
             Parallel.ForEach(ports, new ParallelOptions() {MaxDegreeOfParallelism = threads}, (port) =>
             {
-                var result = CheckServerPort(hostIp, port, timeout, packet);
-                var resultString = "";
+                var result = CheckServerPort(hostIp, port, timeout, packet, buffSize);
                 if (result.Comment != null)
                 {
                     Console.BackgroundColor = ConsoleColor.Green;
                     Console.WriteLine($"Checked ports: {i++}\tPort: {port}\tCode: {result.Code.ToString()}\n" + result.Comment);
                     Console.BackgroundColor = cOrig;
+                    //File.WriteAllText($"{host}_{port}.txt", result.Comment);
                 }
                 else
                 {
@@ -64,9 +76,9 @@ namespace AZLserverScanner
             });
         }
 
-        static CheckResult CheckServerPort(IPAddress hostIp, int port, int timeout, byte[] packet)
+        static CheckResult CheckServerPort(IPAddress hostIp, int port, int timeout, byte[] packet, int buffSize)
         {
-            var buffer = new byte[20000];
+            var buffer = new byte[buffSize];
 
             var clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
             {
