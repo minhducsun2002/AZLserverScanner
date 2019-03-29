@@ -29,17 +29,18 @@ namespace AZLserverScanner
     }
     class Program
     {
-        //<host>                <start port>    <count> <timeout>   <threads count> <buff size in bytes>
-        //audit.us.yo-star.com  10              50      1500        20              1024
+        //<host>                            <start port>    <count> <timeout>   <threads count> <buff size in bytes>
+        //audit.us.yo-star.com  [ip|url]    10              50      1500        20              1024
         static void Main(string[] args)
         {
             //init params
-            var host = args[0];
-            var startPort = int.Parse(args[1]);
-            var portCount = int.Parse(args[2]);
-            var timeout = int.Parse(args[3]);
-            var threadsCount = int.Parse(args[4]);
-            var buffSize = int.Parse(args[5]);
+            var isUrl = args[0] == "url";
+            var host = args[1];
+            var startPort = int.Parse(args[2]);
+            var portCount = int.Parse(args[3]);
+            var timeout = int.Parse(args[4]);
+            var threadsCount = int.Parse(args[5]);
+            var buffSize = int.Parse(args[6]);
 
             var ports = Enumerable.Range(startPort, portCount).ToArray();
             var stopwatch = new Stopwatch();
@@ -51,17 +52,19 @@ namespace AZLserverScanner
             
             stopwatch.Start();
 
-            CheckServerPorts(host, ports, timeout, threadsCount, buffSize);
+            CheckServerPorts(host, ports, isUrl, timeout, threadsCount, buffSize);
 
             stopwatch.Stop();
             Console.WriteLine($"Total elapsed time: {stopwatch.Elapsed}");
         }
 
 
-        static void CheckServerPorts(string host, int[] ports, int timeout = 3000, int threads = 20, int buffSize = 1024)
+        static void CheckServerPorts(string host, int[] ports, bool isUrl, int timeout = 3000, int threads = 20, int buffSize = 1024)
         {
             var cOrig = Console.BackgroundColor;
-            var hostIp = Dns.GetHostEntry(host).AddressList[0];
+
+            var hostIp = isUrl ? Dns.GetHostEntry(host).AddressList[0] : IPAddress.Parse(host);
+
             var packet = BuildCS10800();
             int i = 0;
             Parallel.ForEach(ports, new ParallelOptions() {MaxDegreeOfParallelism = threads}, (port) =>
@@ -80,6 +83,13 @@ namespace AZLserverScanner
                     Console.WriteLine($"Checked ports: {i++}\tPort: {port}\tCode: {result.Code.ToString()}\n");
                     Console.BackgroundColor = cOrig;
                     File.AppendAllText($"packets/{host}_disconnected.txt", port.ToString()+"\n");
+                }
+                else if (result.Code == CheckResult.CheckCode.Error)
+                {
+                    Console.BackgroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"Checked ports: {i++}\tPort: {port}\tCode: {result.Code.ToString()}");
+                    Console.BackgroundColor = cOrig;
+                    File.AppendAllText($"packets/{host}_error.txt", port.ToString() + "\n");
                 }
                 else
                 {
@@ -170,7 +180,7 @@ namespace AZLserverScanner
                     using (MemoryStream stream = new MemoryStream(buffer, start + 7, packetLength - 5))
                     {
                         var helloFromServer = Serializer.Deserialize<SC10801>(stream);
-                        result = result + $"GatewayIp: {helloFromServer.GatewayIp} | GatewayPort: {helloFromServer.GatewayPort}";
+                        result = result + helloFromServer.ToString(); //$"GatewayIp: {helloFromServer.GatewayIp} | GatewayPort: {helloFromServer.GatewayPort}";
                     }
                     break;
                 }
