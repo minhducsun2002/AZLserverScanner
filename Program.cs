@@ -33,9 +33,8 @@ namespace AZLserverScanner
         //audit.us.yo-star.com  [ip|url]    10              50      1500        20              1024
         static void Main(string[] args)
         {
-            //init params
-            var isUrl = args[0] == "url";
-            var host = args[1];
+            var host = args[0];
+            var isUrl = args[1] == "url";
             var startPort = int.Parse(args[2]);
             var portCount = int.Parse(args[3]);
             var timeout = int.Parse(args[4]);
